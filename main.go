@@ -36,18 +36,20 @@ var (
 func main() {
 	inputeth := flag.String("eth", "dev", "eth api Address;") //dev test or product
 	psk := flag.String("sk", "", "signature for sending transaction")
+	pstart := flag.Uint64("start", 1, "start id")
 
 	flag.Parse()
 
 	chain := *inputeth
 	sk := *psk
+	start := *pstart
 
 	// open db
 	database.Open()
 	defer database.DB.Close()
 
 	var id uint64
-	for id = 20000; id <= 467683; id++ {
+	for id = start; id <= 467683; id++ {
 		go func(id uint64) {
 			// read an user from db
 			fmt.Println("now reading user: ", id)

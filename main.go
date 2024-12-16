@@ -104,7 +104,6 @@ func CreateDID(chain string, sk string, user string, id uint64) error {
 	chainID, err := client.NetworkID(context.Background())
 	if err != nil {
 		fmt.Println("chain id: ", chainID)
-		chainID = big.NewInt(666)
 		panic(err)
 	}
 	fmt.Println("chain id: ", chainID)

@@ -146,14 +146,14 @@ func Insert(name string, label string, owner string, basecost string, expires st
 }
 
 // read an user from db by id
-func ReadUserByID(id uint64) (string, error) {
+func ReadUserBalByID(id uint64) (string, string, error) {
 	// check
 	if DB == nil {
-		return "", fmt.Errorf("db not open")
+		return "", "", fmt.Errorf("db not open")
 	}
 
 	// 查询语句
-	query := "SELECT owner FROM reg_logs WHERE lid = ?"
+	query := "SELECT owner,balance FROM reg_logs WHERE lid = ?"
 
 	// 准备查询
 	stmt, err := DB.Prepare(query)
@@ -170,9 +170,10 @@ func ReadUserByID(id uint64) (string, error) {
 	defer rows.Close()
 
 	var owner string
+	var balance string
 	// 遍历结果集
 	for rows.Next() {
-		if err := rows.Scan(&owner); err != nil {
+		if err := rows.Scan(&owner, &balance); err != nil {
 			log.Fatal(err)
 		}
 	}
@@ -182,5 +183,5 @@ func ReadUserByID(id uint64) (string, error) {
 		log.Fatal(err)
 	}
 
-	return owner, nil
+	return owner, balance, nil
 }

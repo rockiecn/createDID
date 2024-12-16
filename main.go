@@ -37,12 +37,14 @@ func main() {
 	inputeth := flag.String("eth", "dev", "eth api Address;") //dev test or product
 	psk := flag.String("sk", "", "signature for sending transaction")
 	pstart := flag.Uint64("start", 1, "start id")
+	pbalance := flag.String("balance", "0", "minimum balance")
 
 	flag.Parse()
 
 	chain := *inputeth
 	sk := *psk
 	start := *pstart
+	bal := *pbalance
 
 	// open db
 	database.Open()
@@ -53,18 +55,26 @@ func main() {
 		go func(id uint64) {
 			// read an user from db
 			fmt.Println("now reading user: ", id)
-			user, err := database.ReadUserByID(id)
+			user, balance, err := database.ReadUserBalByID(id)
 			if err != nil {
 				panic(err)
 			}
+			fmt.Printf("user: %s, balance: %s, startBal: %s\n", user, balance, bal)
 
-			// create did for this user
-			fmt.Printf("now create did for user: %s, id: %d\n", user, id)
-			err = CreateDID(chain, sk, user, id)
-			if err != nil {
-				fmt.Printf("create did failed for user: %s, id: %d, err: %s\n", user, id, err.Error())
+			actBal, _ := new(big.Int).SetString(balance, 10)
+			startBal, _ := new(big.Int).SetString(bal, 10)
+			// check balance
+			if actBal.Cmp(startBal) < 0 {
+				fmt.Println("balance too low, skip")
 			} else {
-				fmt.Printf("create did ok for user: %s, id: [%d]\n", user, id)
+				// create did for this user
+				fmt.Printf("now create did for user: %s, id: %d\n", user, id)
+				err = CreateDID(chain, sk, user, id)
+				if err != nil {
+					fmt.Printf("create did failed for user: %s, id: %d, err: %s\n", user, id, err.Error())
+				} else {
+					fmt.Printf("create did ok for user: %s, id: [%d]\n", user, id)
+				}
 			}
 		}(id)
 

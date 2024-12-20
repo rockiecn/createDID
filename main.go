@@ -1,48 +1,31 @@
 package main
 
 import (
-	"context"
+	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"math/big"
+	"net/http"
 	"time"
 
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/ethclient"
-	com "github.com/memoio/contractsv2/common"
-
-	inst "github.com/memoio/contractsv2/go_contracts/instance"
 	"github.com/rockiecn/createDID/database"
-	"github.com/rockiecn/createDID/go-contracts/proxy"
-
-	"encoding/hex"
 )
 
 var (
-
-	//EcdsaSecp256k1VerificationKey2019  :  pubkey - eth public key
-	//EcdsaSecp256k1RecoveryMethod2020:  pubkey - eth address -> bytes 20位
-	//Ed25519VerificationKey2018： solana,ton:  pubkey - public key 32位
-	// chain related info
-	methodType = "EcdsaSecp256k1RecoveryMethod2020"
-
-	// admin to send tx
 	AdminSK   = "6ec7e0cdda802a466401c912b0dac5ff6116e4372746a455bb43c61294e6f01f"
 	AdminAddr = "0xe0DA2108c52C799F27B02D5AF049374B294f291e"
 )
 
 func main() {
-	inputeth := flag.String("eth", "dev", "eth api Address;") //dev test or product
-	psk := flag.String("sk", "", "signature for sending transaction")
+	//        inputeth := flag.String("eth", "dev", "eth api Address;") //dev test or product
+	//        psk := flag.String("sk", "", "signature for sending transaction")
 	pstart := flag.Uint64("start", 1, "start id")
 	pbalance := flag.String("balance", "0", "minimum balance")
 
 	flag.Parse()
 
-	chain := *inputeth
-	sk := *psk
 	start := *pstart
 	bal := *pbalance
 
@@ -69,7 +52,7 @@ func main() {
 			} else {
 				// create did for this user
 				fmt.Printf("now create did for user: %s, id: %d\n", user, id)
-				err = CreateDID(chain, sk, user, id)
+				err = CreateDID(user)
 				if err != nil {
 					fmt.Printf("create did failed for user: %s, id: %d, err: %s\n", user, id, err.Error())
 				} else {
@@ -83,88 +66,44 @@ func main() {
 
 }
 
-func CreateDID(chain string, sk string, user string, id uint64) error {
-	// query instance
-	instanceAddr, endPoint := com.GetInsEndPointByChain(chain)
-	fmt.Println()
-	//fmt.Println("eth:", endPoint)
-	//fmt.Println("instance address: ", instanceAddr)
+func CreateDID(user string) error {
+	url := "https://didapi.memolabs.org/did/create"
 
-	// ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
-	// defer cancel()
-	ctx := context.Background()
-
-	// get client
-	client, err := ethclient.DialContext(ctx, endPoint)
+	// 使用user地址创建请求数据
+	data := map[string]string{"address": user, "sig": "sig"} // 这里假设你有签名，可以替换 "sig"
+	jsonData, err := json.Marshal(data)
 	if err != nil {
+		fmt.Println("Error marshaling data:", err)
 		return err
 	}
 
-	// get chain id
-	chainID, err := client.NetworkID(context.Background())
+	// 创建POST请求
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
-		fmt.Println("chain id: ", chainID)
-		panic(err)
-	}
-	fmt.Println("chain id: ", chainID)
-
-	// make tx auth
-	txAuth, err := com.MakeAuth(chainID, sk)
-	if err != nil {
+		fmt.Println("Error creating request:", err)
 		return err
 	}
 
-	callopts := &bind.CallOpts{From: com.AdminAddr}
+	// 设置请求头
+	req.Header.Set("Content-Type", "application/json")
 
-	// new instanceIns
-	instanceIns, err := inst.NewInstance(instanceAddr, client)
+	// 发送请求
+	client := &http.Client{}
+	resp, err := client.Do(req)
 	if err != nil {
+		fmt.Println("Error sending request:", err)
+		return err
+	}
+	defer resp.Body.Close()
+
+	// 读取响应
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Println("Error reading response:", err)
 		return err
 	}
 
-	// get proxy addr
-	proxyAddr, err := instanceIns.Instances(callopts, com.TypeDidProxy)
-	if err != nil {
-		return err
-	}
-	//fmt.Println("proxyAddr:", proxyAddr.Hex())
-
-	// get proxy instance
-	proxyIns, err := proxy.NewProxy(proxyAddr, client)
-	if err != nil {
-		return err
-	}
-
-	// base58 decode addr to pubkey
-	//pubkey := base58.Decode(userAddr)
-
-	// string to [20]byte
-
-	pubkey := common.HexToAddress(user).Bytes()
-	//fmt.Printf("pubkey(userAddr): %x\n", pubkey)
-	//fmt.Println("length pubkey: ", len(pubkey))
-
-	// hash pubkey to get did
-	did := crypto.Keccak256(pubkey)
-	hexDID := hex.EncodeToString(did[:])
-
-	//fmt.Println("did: ", hexDID)
-	//fmt.Println("length did: ", len(hexDID))
-	//fmt.Println("methodType: ", methodType)
-
-	// call create did
-	fmt.Println("call proxy.CreateDIDByAdmin")
-	tx, err := proxyIns.CreateDIDByAdmin(txAuth, hexDID, methodType, pubkey)
-	if err != nil {
-		return err
-	}
-
-	// wait for create did tx
-	fmt.Println("waiting tx")
-	err = com.CheckTx(endPoint, tx.Hash(), "createDid")
-	if err != nil {
-		return err
-	}
-
+	// 打印响应内容
+	fmt.Println("Response:", string(body))
 	return nil
 }
